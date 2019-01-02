@@ -22,7 +22,6 @@ function visitSourceFile(
 
   if (hasReactImport && sourceFile.fileName.indexOf('.d.ts') === -1) {
     const exportedComponentNames = findExportedReactComponentNames(sourceFile, program.getTypeChecker());
-
     if (exportedComponentNames.length) {
       const transformedSourceFile = ts.visitEachChild(
         visitNode(sourceFile, exportedComponentNames, sourceFile, program),
@@ -80,13 +79,20 @@ function findExportedReactComponentNames(sourceFile: ts.SourceFile, typeChecker:
   const exportedFunctions = sourceFile.statements.filter(
     s => ts.isFunctionDeclaration(s) && s.modifiers && s.modifiers.find(m => m.kind === ts.SyntaxKind.ExportKeyword),
   ) as ts.FunctionDeclaration[];
+  const exportAssigments = sourceFile.statements.filter(s => ts.isExportAssignment(s)) as ts.ExportAssignment[];
 
-  return [...exportedVariables, ...exportedFunctions]
+  return [...exportedVariables, ...exportedFunctions, ...exportAssigments]
     .map(s => getExportedComponentName(s, typeChecker))
     .filter(n => !!n) as string[];
 }
 
-function getFunction(node: ts.VariableStatement) {
+function getFunction(node: ts.VariableStatement | ts.ExportAssignment) {
+  if (ts.isExportAssignment(node)) {
+    if (ts.isFunctionExpression(node.expression) || ts.isArrowFunction(node.expression)) {
+      return node.expression;
+    }
+    return null;
+  }
   if (!node.modifiers || !node.modifiers.find(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
     return null;
   }
@@ -100,26 +106,34 @@ function getFunction(node: ts.VariableStatement) {
   return null;
 }
 
-function getExportedComponentName(node: ts.FunctionDeclaration | ts.VariableStatement, typeChecker: ts.TypeChecker) {
+function getExportedComponentName(
+  node: ts.FunctionDeclaration | ts.VariableStatement | ts.ExportAssignment,
+  typeChecker: ts.TypeChecker,
+) {
   const func = ts.isFunctionDeclaration(node) ? node : getFunction(node);
   const exportedName = ts.isFunctionDeclaration(node)
     ? node.modifiers && !!node.modifiers.find(m => m.kind === ts.SyntaxKind.DefaultKeyword)
       ? 'default'
       : node.name && node.name.text
+    : ts.isExportAssignment(node)
+    ? 'default'
     : (node.declarationList.declarations[0].name as ts.Identifier).text;
 
   if (func && exportedName) {
-    const type = typeChecker.getTypeAtLocation(node);
+    const type = typeChecker.getTypeAtLocation(func);
     const callSignatures = type.getCallSignatures();
     if (callSignatures.length) {
       const callSignature = callSignatures[0];
       const returnType = typeChecker.getReturnTypeOfSignature(callSignature).getSymbol();
+      const returnParentType = returnType ? ((returnType as any).parent as ts.Symbol) : null;
 
       if (
         // props and context
         (func.parameters.length === 1 || func.parameters.length === 2) &&
         returnType &&
-        returnType.escapedName === 'Element'
+        returnType.escapedName === 'Element' &&
+        returnParentType &&
+        returnParentType.escapedName === 'JSX'
       ) {
         return exportedName;
       }
@@ -175,12 +189,19 @@ function visitNode(
   }
 
   let func: ts.FunctionExpression | ts.FunctionDeclaration | ts.ArrowFunction | null = null;
-  let exported: ts.VariableStatement | ts.FunctionDeclaration | null = null;
+  let exported: ts.VariableStatement | ts.FunctionDeclaration | ts.ExportAssignment | null = null;
 
   if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
     func = node;
-    if (ts.isVariableDeclarationList(node.parent) && ts.isVariableStatement(node.parent.parent)) {
-      exported = node.parent.parent;
+    if (
+      ts.isVariableDeclaration(node.parent) &&
+      ts.isVariableDeclarationList(node.parent.parent) &&
+      ts.isVariableStatement(node.parent.parent.parent)
+    ) {
+      exported = node.parent.parent.parent;
+    }
+    if (ts.isExportAssignment(node.parent)) {
+      exported = node.parent;
     }
   }
 
@@ -243,6 +264,28 @@ function visitNode(
           node.parameters,
           node.type,
           ts.createBlock([...renderStatements, ...node.body!.statements], true),
+        );
+      } else if (ts.isFunctionExpression(node)) {
+        return ts.createFunctionExpression(
+          node.modifiers,
+          node.asteriskToken,
+          node.name,
+          node.typeParameters,
+          node.parameters,
+          node.type,
+          ts.createBlock([...renderStatements, ...node.body!.statements], true),
+        );
+      } else if (ts.isArrowFunction(node)) {
+        const existingStatements = !!(node.body as ts.FunctionBody).statements
+          ? (node.body as ts.FunctionBody).statements
+          : [ts.createReturn(node.body as ts.Expression)];
+        return ts.createArrowFunction(
+          node.modifiers,
+          node.typeParameters,
+          node.parameters,
+          node.type,
+          node.equalsGreaterThanToken,
+          ts.createBlock([...renderStatements, ...existingStatements], true),
         );
       }
     }
