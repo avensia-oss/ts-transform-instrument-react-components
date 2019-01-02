@@ -6,11 +6,27 @@ A TypeScript custom transformer that instruments React components to report whic
 
 ## How to extract the information
 
-This transformer modifies all files that contains components to define a global variable called `reactInstrumentationDefinedComponents`. This is an array of objects which will contain all of the components that your file contains. The objects in the array is of the type `{file: string, name: string}` where the file is the full path to your file.
+This transformer modifies all files that contains components to define a global variable called `reactInstrumentationDefinedComponents`. This is an object with file
+names as key and array of exported names as value. It might look like this:
 
-Another array of the same type is created which is called `reactInstrumentationRenderedComponents`. That will contain a list of the same type of objects of components that have been rendered.
+```
+global.reactInstrumentationDefinedComponents = {
+  'Component1.tsx': ['default', 'SomeOtherComponent']
+}
+```
 
-In order to know which components your file includes that doesn't get rendered you'd run this transform on your code, load the code in Node.js and call `ReactDOM.renderToString()` on your main components and then check the diff of `reactInstrumentationDefinedComponents` and `reactInstrumentationRenderedComponents`.
+Another variable of the same type is created which is called `reactInstrumentationRenderedComponents`. That will contain a list of the same type of objects of c
+omponents that have been rendered. So if only the default export from the previous example was rendered it would look like this:
+
+```
+global.reactInstrumentationRenderedComponents = {
+  'Component1.tsx': ['default']
+}
+```
+
+In order to know which components your file includes that doesn't get rendered you'd run this transform on your code, load the code in Node.js and call
+`ReactDOM.renderToString()` on your main components and then check the diff of `reactInstrumentationDefinedComponents` and `reactInstrumentationRenderedComponents`.
+You can of course also run the transformed code in the browser as well and view those global objects in the dev tools.
 
 ## Other useful transform
 
@@ -19,7 +35,7 @@ If you find this transform useful you might want to use these ones as well: http
 # Installation
 
 ```
-yarn add @avensia-oss/ts-transform-async-import
+yarn add @avensia-oss/ts-transform-instrument-react-components
 ```
 
 ## Usage with webpack
