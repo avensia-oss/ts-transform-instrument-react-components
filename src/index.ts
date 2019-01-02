@@ -79,9 +79,12 @@ function findExportedReactComponentNames(sourceFile: ts.SourceFile, typeChecker:
   const exportedFunctions = sourceFile.statements.filter(
     s => ts.isFunctionDeclaration(s) && s.modifiers && s.modifiers.find(m => m.kind === ts.SyntaxKind.ExportKeyword),
   ) as ts.FunctionDeclaration[];
+  const exportedClasses = sourceFile.statements.filter(
+    s => ts.isClassDeclaration(s) && s.modifiers && s.modifiers.find(m => m.kind === ts.SyntaxKind.ExportKeyword),
+  ) as ts.ClassDeclaration[];
   const exportAssigments = sourceFile.statements.filter(s => ts.isExportAssignment(s)) as ts.ExportAssignment[];
 
-  return [...exportedVariables, ...exportedFunctions, ...exportAssigments]
+  return [...exportedVariables, ...exportedFunctions, ...exportedClasses, ...exportAssigments]
     .map(s => getExportedComponentName(s, typeChecker))
     .filter(n => !!n) as string[];
 }
@@ -107,9 +110,34 @@ function getFunction(node: ts.VariableStatement | ts.ExportAssignment) {
 }
 
 function getExportedComponentName(
-  node: ts.FunctionDeclaration | ts.VariableStatement | ts.ExportAssignment,
+  node: ts.FunctionDeclaration | ts.VariableStatement | ts.ClassDeclaration | ts.ExportAssignment,
   typeChecker: ts.TypeChecker,
 ) {
+  if (ts.isClassDeclaration(node)) {
+    if (node.heritageClauses) {
+      const baseClass = node.heritageClauses.find(h => h.token === ts.SyntaxKind.ExtendsKeyword);
+      if (baseClass) {
+        const extendsReactComponent = !!baseClass.types.find(
+          t =>
+            ts.isExpressionWithTypeArguments(t) &&
+            ts.isPropertyAccessExpression(t.expression) &&
+            ts.isIdentifier(t.expression.expression) &&
+            t.expression.name.escapedText === 'Component' &&
+            t.expression.expression.escapedText === 'React',
+        );
+
+        if (extendsReactComponent) {
+          if (node.modifiers && !!node.modifiers.find(m => m.kind === ts.SyntaxKind.DefaultKeyword)) {
+            return 'default';
+          } else {
+            return node.name!.text;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   const func = ts.isFunctionDeclaration(node) ? node : getFunction(node);
   const exportedName = ts.isFunctionDeclaration(node)
     ? node.modifiers && !!node.modifiers.find(m => m.kind === ts.SyntaxKind.DefaultKeyword)
@@ -188,8 +216,8 @@ function visitNode(
     return nodes;
   }
 
-  let func: ts.FunctionExpression | ts.FunctionDeclaration | ts.ArrowFunction | null = null;
-  let exported: ts.VariableStatement | ts.FunctionDeclaration | ts.ExportAssignment | null = null;
+  let func: ts.FunctionExpression | ts.FunctionDeclaration | ts.ArrowFunction | ts.MethodDeclaration | null = null;
+  let exported: ts.VariableStatement | ts.FunctionDeclaration | ts.ExportAssignment | ts.ClassDeclaration | null = null;
 
   if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
     func = node;
@@ -202,6 +230,20 @@ function visitNode(
     }
     if (ts.isExportAssignment(node.parent)) {
       exported = node.parent;
+    }
+  }
+
+  if (ts.isMethodDeclaration(node)) {
+    const methodName = ts.isIdentifier(node.name)
+      ? node.name.text
+      : ts.isStringLiteral(node.name)
+      ? node.name.text
+      : null;
+    if (methodName === 'render') {
+      func = node;
+      if (ts.isClassDeclaration(node.parent)) {
+        exported = node.parent;
+      }
     }
   }
 
@@ -260,6 +302,18 @@ function visitNode(
           node.modifiers,
           node.asteriskToken,
           node.name,
+          node.typeParameters,
+          node.parameters,
+          node.type,
+          ts.createBlock([...renderStatements, ...node.body!.statements], true),
+        );
+      } else if (ts.isMethodDeclaration(node)) {
+        return ts.createMethod(
+          node.decorators,
+          node.modifiers,
+          node.asteriskToken,
+          node.name,
+          node.questionToken,
           node.typeParameters,
           node.parameters,
           node.type,

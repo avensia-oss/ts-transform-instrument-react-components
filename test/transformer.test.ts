@@ -30,6 +30,98 @@ export default function MyComp1(props) {
   expectEqual(expected, compile(code));
 });
 
+test('exported named function gets instrumented correctly', () => {
+  const code = {
+    'component1.tsx': `
+import * as React from 'react';
+export function MyComp1(props: any) {
+    return <p>Hello!</p>; 
+}
+    `,
+  };
+
+  const expected = {
+    'component1.jsx': `
+const __globalInstrumentationObject = Function("return this")();
+__globalInstrumentationObject.reactInstrumentationDefinedComponents = __globalInstrumentationObject.reactInstrumentationDefinedComponents || {}
+__globalInstrumentationObject.reactInstrumentationDefinedComponents["component1.tsx"] = ["MyComp1"]
+import * as React from 'react';
+export function MyComp1(props) {
+    __globalInstrumentationObject.reactInstrumentationRenderedComponents = __globalInstrumentationObject.reactInstrumentationRenderedComponents || {};
+    __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] = __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] || [];
+    __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"].push("MyComp1");
+    return <p>Hello!</p>;
+}
+    `,
+  };
+
+  expectEqual(expected, compile(code));
+});
+
+test('default export class gets instrumented correctly', () => {
+  const code = {
+    'component1.tsx': `
+import * as React from 'react';
+export default class MyComp1 extends React.Component<any> {
+    render() {
+        return <p>Hello!</p>;
+    }
+}
+    `,
+  };
+
+  const expected = {
+    'component1.jsx': `
+const __globalInstrumentationObject = Function("return this")();
+__globalInstrumentationObject.reactInstrumentationDefinedComponents = __globalInstrumentationObject.reactInstrumentationDefinedComponents || {}
+__globalInstrumentationObject.reactInstrumentationDefinedComponents["component1.tsx"] = ["default"]
+import * as React from 'react';
+export default class MyComp1 extends React.Component {
+    render() {
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents = __globalInstrumentationObject.reactInstrumentationRenderedComponents || {};
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] = __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] || [];
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"].push("default");
+        return <p>Hello!</p>;
+    }
+}
+    `,
+  };
+
+  expectEqual(expected, compile(code));
+});
+
+test('exported named class gets instrumented correctly', () => {
+  const code = {
+    'component1.tsx': `
+import * as React from 'react';
+export class MyComp1 extends React.Component<any> {
+    render() {
+        return <p>Hello!</p>;
+    }
+}
+    `,
+  };
+
+  const expected = {
+    'component1.jsx': `
+const __globalInstrumentationObject = Function("return this")();
+__globalInstrumentationObject.reactInstrumentationDefinedComponents = __globalInstrumentationObject.reactInstrumentationDefinedComponents || {}
+__globalInstrumentationObject.reactInstrumentationDefinedComponents["component1.tsx"] = ["MyComp1"]
+import * as React from 'react';
+export class MyComp1 extends React.Component {
+    render() {
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents = __globalInstrumentationObject.reactInstrumentationRenderedComponents || {};
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] = __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"] || [];
+        __globalInstrumentationObject.reactInstrumentationRenderedComponents["component1.tsx"].push("MyComp1");
+        return <p>Hello!</p>;
+    }
+}
+    `,
+  };
+
+  expectEqual(expected, compile(code));
+});
+
 test('multiple exports gets instrumented correctly', () => {
   const code = {
     'component1.tsx': `
