@@ -34,20 +34,6 @@ function visitSourceFile(
   return sourceFile;
 }
 
-function flatMap<T>(arr: (T | null | undefined | (T | null | undefined)[])[]): T[] {
-  const flattened: T[] = [];
-  for (const t of arr) {
-    if (t) {
-      if (Array.isArray(t)) {
-        flattened.push(...(t.filter(x => !!x) as T[]));
-      } else {
-        flattened.push(t);
-      }
-    }
-  }
-  return flattened;
-}
-
 function visitNodeAndChildren(
   node: ts.Node,
   exportedComponentNames: string[],
