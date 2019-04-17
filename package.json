@@ -1,6 +1,6 @@
 {
   "name": "@avensia-oss/ts-transform-instrument-react-components",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A TypeScript custom transformer that instruments React components to be able to detect which components aren't rendered",
   "main": "index.js",
   "types": "dist/src/index.d.ts",
